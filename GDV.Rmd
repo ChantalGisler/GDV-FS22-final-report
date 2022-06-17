@@ -2,30 +2,395 @@
 title: "R Notebook"
 output: html_notebook
 ---
-
-This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
-
-Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Ctrl+Shift+Enter*. 
-
+### Installing libraries
 ```{r}
-plot(cars)
+library(tidyverse)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(magrittr)
+#install.packages("PerformanceAnalytics")
+library("PerformanceAnalytics")
+#install.packages("scales")
+#library(scales)
 ```
 
-Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Ctrl+Alt+I*.
-
-When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Ctrl+Shift+K* to preview the HTML file).
-
-The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.
+### Data Wrangling
 ```{r}
-data("airquality")
+bike_data <- read_csv("SeoulBikeData.csv",
+  show_col_types = FALSE,
+  col_types = cols(Date = col_date(format = "%d/%m/%Y"),
+    Seasons = col_factor(levels = c("Winter", "Spring", "Summer", "Autumn"),
+                         ordered = TRUE),
+    Holiday = col_factor(),
+    "Functioning Day" = col_factor()
+  ))
 ```
 
 ```{r}
-# Eine Grafik gestalten
-plot(airquality$Wind, type="n",airquality$Ozone, xlab="Wind", ylab = "Ozone") 
-title(main="Wind and Ozone in New York") # Titel oben hinschreiben
-may <- subset(airquality, Month==5) # Nach Monat Mai gruppieren
-points(may$Wind,may$Ozone,col="blue",pch=8) # Die Punkte im Plot als blaue Dreiecke markieren
-# notmay <- subset(airquality, Month!=5) # Nach allen Monaten, die nicht Mai sind, gruppieren
-# points(notmay$Wind,notmay$Ozone,col="red",pch=8) # Die Punkte von nicht-Mai als rote Schneeflocken gestalten
+bike_data <- bike_data %>%
+  mutate(day = weekdays(Date), 
+         month = months(Date),
+         day_time = case_when(
+           Hour >= 5 & Hour < 11 ~ "Morning",
+           Hour >= 11 & Hour < 15 ~ "Noon",
+           Hour >= 15 & Hour < 18 ~ "Afternoon",
+           Hour >= 18 & Hour < 22 ~ "Evening",
+           Hour < 5 | Hour >= 22 ~ "Night")) %>%
+  select(Date,month,day,Hour,day_time, Holiday, 'Rented Bike Count',everything())
 ```
+
+```{r}
+bike_data$day_time <- factor(bike_data$day_time,
+                             levels = c("Morning", "Noon", "Afternoon", "Evening", "Night"),ordered = TRUE)
+
+bike_data$day <- factor(bike_data$day, 
+                        levels = c("Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag" ))
+
+bike_data$month <- factor(bike_data$month, 
+                          levels = c("Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober","November", "Dezember"))
+```
+
+### LO1 - Visualisation basics and chart types
+```{r}
+### Creating a piechart
+piechartdata <- bike_data %>% 
+  arrange(desc(day_time)) %>%
+  mutate(prop = `Rented Bike Count` / sum(bike_data$`Rented Bike Count`) *100) %>%
+  mutate(ypos = cumsum(prop)- 0.5*prop )
+
+ggplot(piechartdata, aes(x = "", y = `Rented Bike Count`, fill = day_time))+
+  geom_bar(stat="identity", width=1) +
+  coord_polar("y", start=0)+
+  theme_void()+
+  ggtitle("The most popular daytime for renting a bike in Seoul")+
+  guides(fill = guide_legend(title = "Rented Bikes in Percent"))
+```
+```{r}
+### Boxplot showing the most popular daytimes for renting a bike in Seoul
+ggplot(bike_data, aes(x = as.factor(Hour), y = `Rented Bike Count`))+
+  geom_boxplot()+
+  ggtitle("Distribution of bike rentals on daytimesin Seoul")+
+  xlab("Time")+
+  ylab("Bike rentals")+
+  theme_minimal()
+```
+
+```{r}
+### barplot showing the daytimes as five pictures
+bikes <- as.numeric(bike_data$`Rented Bike Count`)
+
+ggplot(bike_data, aes(x= Hour, y = bikes)) +
+  geom_bar(stat = "identity") +
+  facet_wrap(~day_time) +
+  ggtitle("Popular daytimes for renting a bike in Seoul") +
+  xlab("Hour") +
+  ylab("Rented Bikes")+
+  theme_minimal()
+```
+
+```{r}
+### Line chart
+ggplot(bike_data, aes(x = Hour, y = bike_data$'Rented Bike Count', group = day_time)) +
+  geom_line() +
+  geom_path()+
+  geom_point()+
+  #facet_wrap(~Seasons) +
+  #stat_smooth(method = lm, color = "red") +
+  ggtitle("Popular daytimes for renting a bike in Seoul") +
+  xlab("Hour") +
+  ylab("Rented Bikes")
+```
+
+```{r}
+### Point chart showing all the daytimes
+ggplot(bike_data, aes(x= Hour, y = bike_data$'Rented Bike Count')) +
+  geom_point() +
+  #facet_wrap(~Seasons) +
+  #stat_smooth(method = lm, color = "red") +
+  ggtitle("Popular daytimes for renting a bike in Seoul") +
+  xlab("Hour") +
+  ylab("Rented Bikes")+
+  theme_minimal()
+```
+
+```{r}
+### Point chart without trendline and divided by seasons
+ggplot(bike_data, aes(x= Hour, y = bike_data$'Rented Bike Count')) +
+  geom_point() +
+  facet_wrap(~Seasons) +
+  #stat_smooth(method = lm, color = "red") +
+  ggtitle("Popular daytimes for renting a bike by seasons") +
+  xlab("Hour") +
+  ylab("Rented Bikes")+
+  theme_minimal()
+```
+
+```{r}
+### Point chart with trendline
+ggplot(bike_data, aes(x= Hour, y = bike_data$'Rented Bike Count')) +
+  geom_point() +
+  facet_wrap(~Seasons) +
+  stat_smooth(method = lm, color = "red") +
+  ggtitle("Popular daytimes for renting a bike by seasons") +
+  xlab("Hour") +
+  ylab("Rented Bikes")+
+  theme_minimal()
+```
+
+```{r}
+str(bike_data)
+```
+
+```{r}
+require(scales)
+```
+
+
+```{r}
+### Bar chart for popular daytime
+ggplot(bike_data, aes(x= Hour, y = `Rented Bike Count`)) +
+  geom_col() +
+  #facet_wrap(~Seasons) +
+  ggtitle("Popular daytimes for renting a bike in Seoul") +
+  xlab("Hour") +
+  ylab("Rented Bikes")+
+  theme_minimal()+
+  scale_y_continuous(labels = comma)
+```
+### LO2 - Visual Perception
+```{r}
+### Correlation between temperature and bike rental
+ggplot(bike_data, aes(`Temperature` ,`Rented Bike Count`))+
+geom_jitter()+
+  scale_fill_grey(start = 0.2, end = 0.8,na.value = "red")+
+stat_smooth(method = lm, se = FALSE, color = "green")+
+  labs(
+    x = "Temperature in Celsius",
+    y = "Rented Bikes",
+    title = "Correlation between temperature and rented bikes")+
+  theme_minimal()
+```
+
+```{r}
+ggplot(bike_data, aes(x= Temperature, y = `Rented Bike Count`,color=Temperature))+
+  geom_jitter()+
+  stat_smooth(method = lm, se = FALSE, color = "red")+
+  theme_minimal()
+```
+
+```{r}
+### Correlation between rain and bike rental
+ggplot(bike_data,aes(x= Rainfall, y = `Rented Bike Count`,color=Rainfall))+
+  geom_line(color = "light blue")+
+  #stat_smooth(method = lm, se = FALSE, color = "red")+
+  ggtitle("Bike rental when it rains")+
+  facet_wrap(~month)+
+  theme_minimal()+
+  xlab("Rainfall in mm")
+```
+```{r}
+# Rainfall plot with points
+ggplot(bike_data, aes(x = as.factor(Hour), y = Rainfall))+
+  geom_boxplot(color = "deepskyblue")+
+  facet_wrap(~month) +
+  ggtitle("Rain by month and hour")+
+  xlab("Hour of the day") +
+  ylab("Rain in mm")+
+  theme_minimal()
+```
+
+```{r}
+### Correlation between rain and bike rental
+ggplot(bike_data,aes(x= Rainfall, y = `Rented Bike Count`,color=Rainfall))+
+  geom_point(shape = 19, color = "deepskyblue")+
+  #stat_smooth(method = lm, se = FALSE, color = "red")+
+  ggtitle("Bike rental when it rains in Seoul")+
+  theme_minimal()
+```
+
+```{r}
+ggplot(bike_data,aes(x= Snowfall, y = `Rented Bike Count`))+
+  geom_jitter(shape=8, (aes(color = Temperature)))+
+  scale_color_gradient(low="dark blue", high= "orange")+
+  ggtitle("Bike rentals when it snows")+
+  theme_minimal()
+```
+
+```{r}
+### change the shape by months
+monat <- as.Date(bike_data$month, "%d.%m.%Y")
+wintermonth <- filter(bike_data, month == "November" | month == "Dezember" | month == "Januar" | month == "Februar")
+
+ggplot(wintermonth,aes(x= Snowfall, y = `Rented Bike Count`))+
+  geom_jitter(shape=8, (aes(color = Temperature)))+
+  scale_color_gradient(low="deepskyblue3", high= "azure1")+
+  facet_wrap(~month)+
+  ggtitle("Bike rental and the impact of snow")+
+  theme_minimal()
+```
+```{r}
+monat <- as.Date(bike_data$month, "%d.%m.%Y")
+wintermonth <- filter(bike_data, month == "November" | month == "Dezember" | month == "Januar" | month == "Februar")
+
+ggplot(wintermonth,aes(x= `Rented Bike Count`, y = Snowfall))+
+  geom_jitter(shape=8, (aes(color = Temperature)))+
+  scale_color_gradient(low="dark blue", high= "light blue")+
+  facet_wrap(~month)+
+  ggtitle("Bike rental and the impact of snow")+
+  theme_minimal()
+```
+
+```{r}
+ggplot(bike_data,aes(x= Snowfall, y = `Rented Bike Count`))+
+  geom_jitter(shape=8, (aes(color = Temperature)))+
+  scale_color_gradient(low="dark blue", high= "light blue")+
+  facet_wrap(~month)+
+  ggtitle("Bike rental and the impact of snow")+
+  theme_minimal()
+```
+
+### LO3 - Design principes vs. data decisions
+
+```{r}
+### Temperature
+ggplot(bike_data, aes(x= Temperature, y = `Rented Bike Count`))+
+  geom_jitter((aes(color = Temperature)))+
+  scale_color_gradient(low="cyan", high="dark orange")+
+  #scale_fill_gradient2(low="blue", high="red", mid = "yellow", midpoint = 0)+
+  #facet_wrap(~Seasons)+
+  theme_minimal() +
+  ggtitle("Bike rental at different temperatures in Seoul")+
+  xlab("Temperature in Celsius")
+  #stat_smooth(method = lm, se = FALSE, color = "red")
+```
+
+### LO4 - Grammar of data
+
+```{r}
+bike_data %>%
+  group_by(month, season) %>%
+  summarize(total_bikes = sum(bike_count)) %>%
+  ggplot(aes(x = month,
+             y = total_bikes, 
+             fill = season)) +
+  geom_col(alpha = 0.6) +
+  ggtitle(" Total bikes rented by month") +
+  xlab("Month") +
+  ylab("Total bike rented") +
+  geom_text(aes(label = total_bikes), 
+            vjust = -0.3, 
+            size = 3) +
+  scale_fill_manual(values = col_seasons)+
+  my_theme +
+  theme(axis.text.x = element_text(angle = 90))
+```
+
+### LO5 - Evaluation
+
+```{r}
+### Temperature
+ggplot(bike_data, aes(x= Temperature, y = `Rented Bike Count`))+
+  geom_jitter((aes(color = Temperature)))+
+  scale_color_gradient(low="cyan", high="dark orange")+
+  #scale_fill_gradient2(low="#00aedb", high="red", mid = "yellow", midpoint = 0)+
+  #facet_wrap(~Seasons)+
+  theme_minimal() +
+  ggtitle("Bike rental at different temperatures in Seoul in one year")+
+  xlab("Temperature in Celsius")+
+  stat_smooth(method = lm, se = FALSE, color = "red")
+```
+
+```{r}
+ggplot(bike_data, aes(x= Temperature, y = `Rented Bike Count`))+
+  geom_jitter((aes(color = Temperature)))+
+  scale_color_gradient(low="cyan", high="dark orange")+
+  #scale_fill_gradient2(low="#00aedb", high="red", mid = "yellow", midpoint = 0)+
+  facet_wrap(~Seasons)+
+  theme_minimal() +
+  ggtitle("Bike rental at different temperatures")+
+  xlab("Temperature in Celsius")+
+  stat_smooth(method = lm, se = FALSE, color = "red")
+```
+
+```{r}
+### Correlation between rain and bike rental
+ggplot(bike_data,aes(x= Rainfall, y = `Rented Bike Count`,color=Rainfall))+
+  geom_point(shape = 19, color = "deepskyblue")+
+  #stat_smooth(method = lm, se = FALSE, color = "red")+
+  ggtitle("Bike rental when it rains")+
+  theme_minimal()
+```
+```{r}
+ggplot(bike_data,aes(x= `Rented Bike Count`, y = Rainfall ,color=Rainfall))+
+  geom_point(shape = 19, color = "deepskyblue")+
+  #stat_smooth(method = lm, se = FALSE, color = "red")+
+  ggtitle("Bike rental when it rains")+
+  theme_minimal()
+```
+
+```{r}
+### Visibility
+ggplot(bike_data, aes(x= Visibility, y = `Rented Bike Count`))+
+  geom_jitter((aes(color = Visibility)))+
+  scale_color_gradient(low="antiquewhite3", high="azure2")+
+  #scale_fill_gradient2(low="#00aedb", high="red", mid = "yellow", midpoint = 0)+
+  #facet_wrap(~Seasons)+
+  theme_minimal() +
+  ggtitle("Bike rental at how far you can see through the smog in Seoul ")+
+  xlab("Visibility in meters")+
+  stat_smooth(method = lm, se = FALSE, color = "red")
+```
+
+```{r}
+### Snowfall Number 1
+
+ggplot(bike_data,aes(x= Snowfall, y = `Rented Bike Count`))+
+  geom_jitter(shape=8, (aes(color = Snowfall)))+
+  scale_color_gradient(low="grey", high= "cyan")+
+  ggtitle("Bike rentals when it snows")+
+  theme_minimal()
+```
+```{r}
+ggplot(bike_data,aes(x= `Rented Bike Count`, y = Snowfall))+
+  geom_jitter(shape=8, (aes(color = Snowfall)))+
+  scale_color_gradient(low="grey", high= "cyan")+
+  ggtitle("Bike rentals when it snows")+
+  theme_minimal()
+```
+
+```{r}
+ggplot(bike_data,aes(x= Snowfall, y = `Rented Bike Count`))+
+  geom_line((aes(color = Snowfall)), size = 1.5)+
+  scale_color_gradient(low="grey", high= "cyan")+
+  ggtitle("Bike rentals when it snows")+
+  theme_minimal()
+```
+
+```{r}
+bike_data %>%
+  group_by(Seasons,day_time) %>%
+  summarise(total_bikes = sum(`Rented Bike Count`)) %>%
+  ggplot(aes(x = total_bikes, 
+             y = day_time, 
+             fill = Seasons)) +
+  geom_col(position = "fill", 
+           alpha = 0.6)+
+  ggtitle("Proportion of bike rentals across seasons in Seoul") +
+  xlab("Proportion of bike rentals") +
+  ylab("Time of day") +
+  theme_minimal()
+```
+
+```{r}
+bike_data %>%
+  group_by(day_time) %>%
+  summarize(total_bikes = sum(`Rented Bike Count`)) %>%
+  ggplot(aes(x = total_bikes, y = day_time, fill = day_time)) +
+  geom_col(alpha = 0.6) +
+  ggtitle(" Total bikes rented by daytime in Seoul") +
+  xlab("Total bikes rented") +
+  ylab("Daytime") +
+  geom_text(aes(label = total_bikes), vjust = -0.3, size = 3) 
+```
+
